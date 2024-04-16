@@ -1,6 +1,6 @@
-package com.google.example.gms.nativeadsexample;
+spackage com.google.example.gms.nativeadsexample;
 
-import android.app.Activity;
+tab ecc contol + shift + m import android.app.Activity;
 import android.content.Context;
 import com.google.android.ump.ConsentDebugSettings;
 import com.google.android.ump.ConsentForm.OnConsentFormDismissedListener;
