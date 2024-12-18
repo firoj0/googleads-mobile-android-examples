@@ -24,14 +24,18 @@ import android.util.Log;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import com.google.android.gms.ads.MobileAds;
+import com.google.android.gms.ads.RequestConfiguration;
 import com.google.android.gms.example.appopenexample.MyApplication.OnShowAdCompleteListener;
+import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Splash Activity that inflates splash activity xml. */
 public class SplashActivity extends AppCompatActivity {
+
   private static final String LOG_TAG = "SplashActivity";
   private final AtomicBoolean isMobileAdsInitializeCalled = new AtomicBoolean(false);
+  private final AtomicBoolean gatherConsentFinished = new AtomicBoolean(false);
   private GoogleMobileAdsConsentManager googleMobileAdsConsentManager;
 
   /**
@@ -48,7 +52,7 @@ public class SplashActivity extends AppCompatActivity {
     setContentView(R.layout.activity_splash);
 
     // Create a timer so the SplashActivity will be displayed for a fixed amount of time.
-    createTimer(COUNTER_TIME_MILLISECONDS);
+    createTimer();
 
     googleMobileAdsConsentManager =
         GoogleMobileAdsConsentManager.getInstance(getApplicationContext());
@@ -59,9 +63,10 @@ public class SplashActivity extends AppCompatActivity {
             // Consent not obtained in current session.
             Log.w(
                 LOG_TAG,
-                String.format(
-                    "%s: %s", consentError.getErrorCode(), consentError.getMessage()));
+                String.format("%s: %s", consentError.getErrorCode(), consentError.getMessage()));
           }
+
+          gatherConsentFinished.set(true);
 
           if (googleMobileAdsConsentManager.canRequestAds()) {
             initializeMobileAdsSdk();
@@ -78,16 +83,12 @@ public class SplashActivity extends AppCompatActivity {
     }
   }
 
-  /**
-   * Create the countdown timer, which counts down to zero and show the app open ad.
-   *
-   * @param time the number of milliseconds that the timer counts down from
-   */
-  private void createTimer(long time) {
+  /** Create the countdown timer, which counts down to zero and show the app open ad. */
+  private void createTimer() {
     final TextView counterTextView = findViewById(R.id.timer);
 
     CountDownTimer countDownTimer =
-        new CountDownTimer(time, 1000) {
+        new CountDownTimer(COUNTER_TIME_MILLISECONDS, 1000) {
           @SuppressLint("SetTextI18n")
           @Override
           public void onTick(long millisUntilFinished) {
@@ -109,9 +110,8 @@ public class SplashActivity extends AppCompatActivity {
                       @Override
                       public void onShowAdComplete() {
                         // Check if the consent form is currently on screen before moving to the
-                        // main
-                        // activity.
-                        if (googleMobileAdsConsentManager.canRequestAds()) {
+                        // main activity.
+                        if (gatherConsentFinished.get()) {
                           startMainActivity();
                         }
                       }
@@ -126,12 +126,25 @@ public class SplashActivity extends AppCompatActivity {
       return;
     }
 
-    // Initialize the Mobile Ads SDK.
-    MobileAds.initialize(this);
+    // Set your test devices.
+    MobileAds.setRequestConfiguration(
+        new RequestConfiguration.Builder()
+            .setTestDeviceIds(Arrays.asList(MyApplication.TEST_DEVICE_HASHED_ID))
+            .build());
 
-    // Load an ad.
-    Application application = getApplication();
-    ((MyApplication) application).loadAd(this);
+    new Thread(
+            () -> {
+              // Initialize the Google Mobile Ads SDK on a background thread.
+              MobileAds.initialize(this, initializationStatus -> {});
+
+              // Load an ad on the main thread.
+              runOnUiThread(
+                  () -> {
+                    Application application = getApplication();
+                    ((MyApplication) application).loadAd(this);
+                  });
+            })
+        .start();
   }
 
   /** Start the MainActivity. */

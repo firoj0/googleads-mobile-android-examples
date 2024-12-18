@@ -28,14 +28,15 @@ import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.MobileAds
+import com.google.android.gms.ads.RequestConfiguration
 import com.google.android.gms.ads.admanager.AdManagerAdRequest
 import com.google.android.gms.ads.admanager.AdManagerInterstitialAd
 import com.google.android.gms.ads.admanager.AdManagerInterstitialAdLoadCallback
 import com.google.android.gms.example.interstitialexample.databinding.ActivityMyBinding
 import java.util.concurrent.atomic.AtomicBoolean
-
-const val GAME_LENGTH_MILLISECONDS: Long = 3000
-const val AD_UNIT_ID = "/6499/example/interstitial"
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /** Main Activity. Inflates main activity xml. */
 class MyActivity : AppCompatActivity() {
@@ -89,9 +90,6 @@ class MyActivity : AppCompatActivity() {
 
   override fun onCreateOptionsMenu(menu: Menu?): Boolean {
     menuInflater.inflate(R.menu.action_menu, menu)
-    menu?.findItem(R.id.action_more)?.apply {
-      isVisible = googleMobileAdsConsentManager.isPrivacyOptionsRequired
-    }
     return super.onCreateOptionsMenu(menu)
   }
 
@@ -100,6 +98,9 @@ class MyActivity : AppCompatActivity() {
     val activity = this
     PopupMenu(this, menuItemView).apply {
       menuInflater.inflate(R.menu.popup_menu, menu)
+      menu
+        .findItem(R.id.privacy_settings)
+        .setVisible(googleMobileAdsConsentManager.isPrivacyOptionsRequired)
       show()
       setOnMenuItemClickListener { popupMenuItem ->
         when (popupMenuItem.itemId) {
@@ -111,6 +112,13 @@ class MyActivity : AppCompatActivity() {
                 Toast.makeText(activity, formError.message, Toast.LENGTH_SHORT).show()
               }
               resumeGame()
+            }
+            true
+          }
+          R.id.ad_inspector -> {
+            MobileAds.openAdInspector(activity) { error ->
+              // Error will be non-null if ad inspector closed due to an error.
+              error?.let { Toast.makeText(activity, it.message, Toast.LENGTH_SHORT).show() }
             }
             true
           }
@@ -144,7 +152,7 @@ class MyActivity : AppCompatActivity() {
           Toast.makeText(
               this@MyActivity,
               "onAdFailedToLoad() with error $error",
-              Toast.LENGTH_SHORT
+              Toast.LENGTH_SHORT,
             )
             .show()
         }
@@ -155,7 +163,7 @@ class MyActivity : AppCompatActivity() {
           adIsLoading = false
           Toast.makeText(this@MyActivity, "onAdLoaded()", Toast.LENGTH_SHORT).show()
         }
-      }
+      },
     )
   }
 
@@ -252,14 +260,33 @@ class MyActivity : AppCompatActivity() {
       return
     }
 
-    // Initialize the Mobile Ads SDK.
-    MobileAds.initialize(this) { initializationStatus ->
-      // Load an ad.
-      loadAd()
+    // Set your test devices.
+    MobileAds.setRequestConfiguration(
+      RequestConfiguration.Builder().setTestDeviceIds(listOf(TEST_DEVICE_HASHED_ID)).build()
+    )
+
+    CoroutineScope(Dispatchers.IO).launch {
+      // Initialize the Google Mobile Ads SDK on a background thread.
+      MobileAds.initialize(this@MyActivity) {}
+
+      runOnUiThread {
+        // Load an ad on the main thread.
+        loadAd()
+      }
     }
   }
 
-  private companion object {
-    const val TAG = "MyActivity"
+  companion object {
+    // This is an ad unit ID for a test ad. Replace with your own interstitial ad unit ID.
+    private const val AD_UNIT_ID = "/21775744923/example/interstitial"
+    private const val GAME_LENGTH_MILLISECONDS: Long = 3000
+    private const val TAG = "MyActivity"
+
+    // Check your logcat output for the test device hashed ID e.g.
+    // "Use RequestConfiguration.Builder().setTestDeviceIds(Arrays.asList("ABCDEF012345"))
+    // to get test ads on this device" or
+    // "Use new ConsentDebugSettings.Builder().addTestDeviceHashedId("ABCDEF012345") to set this as
+    // a debug device".
+    const val TEST_DEVICE_HASHED_ID = "ABCDEF012345"
   }
 }

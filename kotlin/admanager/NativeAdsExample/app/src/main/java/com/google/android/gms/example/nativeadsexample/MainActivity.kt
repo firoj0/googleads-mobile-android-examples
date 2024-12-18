@@ -28,11 +28,13 @@ import com.google.android.gms.ads.AdListener
 import com.google.android.gms.ads.AdLoader
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.MobileAds
+import com.google.android.gms.ads.RequestConfiguration
 import com.google.android.gms.ads.VideoController
 import com.google.android.gms.ads.VideoOptions
 import com.google.android.gms.ads.admanager.AdManagerAdRequest
 import com.google.android.gms.ads.nativead.MediaView
 import com.google.android.gms.ads.nativead.NativeAd
+import com.google.android.gms.ads.nativead.NativeAdAssetNames
 import com.google.android.gms.ads.nativead.NativeAdOptions
 import com.google.android.gms.ads.nativead.NativeAdView
 import com.google.android.gms.ads.nativead.NativeCustomFormatAd
@@ -41,10 +43,9 @@ import com.google.android.gms.example.nativeadsexample.databinding.AdSimpleCusto
 import com.google.android.gms.example.nativeadsexample.databinding.AdUnifiedBinding
 import java.util.*
 import java.util.concurrent.atomic.AtomicBoolean
-
-private const val TAG = "MainActivity"
-const val AD_MANAGER_AD_UNIT_ID = "/6499/example/native"
-const val SIMPLE_TEMPLATE_ID = "10104090"
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /** A simple activity class that displays native ad formats. */
 class MainActivity : AppCompatActivity() {
@@ -91,7 +92,7 @@ class MainActivity : AppCompatActivity() {
       if (googleMobileAdsConsentManager.canRequestAds) {
         refreshAd(
           mainActivityBinding.nativeadsCheckbox.isChecked,
-          mainActivityBinding.customtemplateCheckbox.isChecked
+          mainActivityBinding.customtemplateCheckbox.isChecked,
         )
       }
     }
@@ -99,9 +100,6 @@ class MainActivity : AppCompatActivity() {
 
   override fun onCreateOptionsMenu(menu: Menu): Boolean {
     menuInflater.inflate(R.menu.action_menu, menu)
-    menu?.findItem(R.id.action_more)?.apply {
-      isVisible = googleMobileAdsConsentManager.isPrivacyOptionsRequired
-    }
     return super.onCreateOptionsMenu(menu)
   }
 
@@ -110,6 +108,9 @@ class MainActivity : AppCompatActivity() {
     val activity = this
     PopupMenu(this, menuItemView).apply {
       menuInflater.inflate(R.menu.popup_menu, menu)
+      menu
+        .findItem(R.id.privacy_settings)
+        .setVisible(googleMobileAdsConsentManager.isPrivacyOptionsRequired)
       show()
       setOnMenuItemClickListener { popupMenuItem ->
         when (popupMenuItem.itemId) {
@@ -117,8 +118,15 @@ class MainActivity : AppCompatActivity() {
             // Handle changes to user consent.
             googleMobileAdsConsentManager.showPrivacyOptionsForm(activity) { formError ->
               if (formError != null) {
-                Toast.makeText(this@MainActivity, formError.message, Toast.LENGTH_SHORT).show()
+                Toast.makeText(activity, formError.message, Toast.LENGTH_SHORT).show()
               }
+            }
+            true
+          }
+          R.id.ad_inspector -> {
+            MobileAds.openAdInspector(activity) { error ->
+              // Error will be non-null if ad inspector closed due to an error.
+              error?.let { Toast.makeText(activity, it.message, Toast.LENGTH_SHORT).show() }
             }
             true
           }
@@ -219,7 +227,7 @@ class MainActivity : AppCompatActivity() {
         String.format(
           Locale.getDefault(),
           "Video status: Ad contains a %.2f:1 video asset.",
-          mediaContent.aspectRatio
+          mediaContent.aspectRatio,
         )
       // Create a new VideoLifecycleCallbacks object and pass it to the VideoController. The
       // VideoController will call methods on this object when events occur in the video
@@ -245,7 +253,6 @@ class MainActivity : AppCompatActivity() {
    * particular "simple" custom native ad format.
    *
    * @param nativeCustomFormatAd the object containing the ad's assets
-   * @param adView the view to be populated
    */
   private fun populateSimpleTemplateAdView(nativeCustomFormatAd: NativeCustomFormatAd) {
     customTemplateBinding.simplecustomHeadline.text = nativeCustomFormatAd.getText("Headline")
@@ -267,6 +274,20 @@ class MainActivity : AppCompatActivity() {
             super.onVideoEnd()
           }
         }
+    }
+
+    // Render the AdChoices image.
+    val adChoicesKey = NativeAdAssetNames.ASSET_ADCHOICES_CONTAINER_VIEW
+    val adChoiceAsset = nativeCustomFormatAd.getImage(adChoicesKey)
+    if (adChoiceAsset == null) {
+      customTemplateBinding.simplecustomAdchoices.visibility = View.GONE
+    } else {
+      customTemplateBinding.simplecustomAdchoices.setImageDrawable(adChoiceAsset.drawable)
+      customTemplateBinding.simplecustomAdchoices.visibility = View.VISIBLE
+      // Enable clicks on AdChoices.
+      customTemplateBinding.simplecustomAdchoices.setOnClickListener {
+        nativeCustomFormatAd.performClick(adChoicesKey)
+      }
     }
 
     val mediaContent = nativeCustomFormatAd.mediaContent
@@ -305,14 +326,14 @@ class MainActivity : AppCompatActivity() {
       Toast.makeText(
           this,
           "At least one ad format must be checked to request an ad.",
-          Toast.LENGTH_SHORT
+          Toast.LENGTH_SHORT,
         )
         .show()
       return
     }
     mainActivityBinding.refreshButton.isEnabled = true
 
-    val builder = AdLoader.Builder(this, AD_MANAGER_AD_UNIT_ID)
+    val builder = AdLoader.Builder(this, AD_UNIT_ID)
     if (requestNativeAds) {
       builder.forNativeAd { nativeAd ->
         // If this callback occurs after the activity is destroyed, you must call
@@ -363,10 +384,10 @@ class MainActivity : AppCompatActivity() {
           Toast.makeText(
               this@MainActivity,
               "A custom click has occurred in the simple template",
-              Toast.LENGTH_SHORT
+              Toast.LENGTH_SHORT,
             )
             .show()
-        }
+        },
       )
     }
 
@@ -390,7 +411,7 @@ class MainActivity : AppCompatActivity() {
               Toast.makeText(
                   this@MainActivity,
                   "Failed to load native ad with error $error",
-                  Toast.LENGTH_SHORT
+                  Toast.LENGTH_SHORT,
                 )
                 .show()
             }
@@ -408,13 +429,21 @@ class MainActivity : AppCompatActivity() {
       return
     }
 
-    // Initialize the Mobile Ads SDK.
-    MobileAds.initialize(this) { initializationStatus ->
-      // Load an ad.
-      refreshAd(
-        mainActivityBinding.nativeadsCheckbox.isChecked,
-        mainActivityBinding.customtemplateCheckbox.isChecked
-      )
+    // Set your test devices.
+    MobileAds.setRequestConfiguration(
+      RequestConfiguration.Builder().setTestDeviceIds(listOf(TEST_DEVICE_HASHED_ID)).build()
+    )
+
+    CoroutineScope(Dispatchers.IO).launch {
+      // Initialize the Google Mobile Ads SDK on a background thread.
+      MobileAds.initialize(this@MainActivity) {}
+      runOnUiThread {
+        // Load an ad on the main thread.
+        refreshAd(
+          mainActivityBinding.nativeadsCheckbox.isChecked,
+          mainActivityBinding.customtemplateCheckbox.isChecked,
+        )
+      }
     }
   }
 
@@ -422,5 +451,19 @@ class MainActivity : AppCompatActivity() {
     currentNativeAd?.destroy()
     currentCustomFormatAd?.destroy()
     super.onDestroy()
+  }
+
+  companion object {
+    // This is an ad unit ID for a test ad. Replace with your own native ad unit ID.
+    private const val AD_UNIT_ID = "/21775744923/example/native"
+    private const val SIMPLE_TEMPLATE_ID = "12387226"
+    private const val TAG = "MainActivity"
+
+    // Check your logcat output for the test device hashed ID e.g.
+    // "Use RequestConfiguration.Builder().setTestDeviceIds(Arrays.asList("ABCDEF012345"))
+    // to get test ads on this device" or
+    // "Use new ConsentDebugSettings.Builder().addTestDeviceHashedId("ABCDEF012345") to set this as
+    // a debug device".
+    const val TEST_DEVICE_HASHED_ID = "ABCDEF012345"
   }
 }

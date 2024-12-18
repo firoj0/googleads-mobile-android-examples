@@ -14,15 +14,14 @@ import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.MobileAds
+import com.google.android.gms.ads.RequestConfiguration
 import com.google.android.gms.ads.rewardedinterstitial.RewardedInterstitialAd
 import com.google.android.gms.ads.rewardedinterstitial.RewardedInterstitialAdLoadCallback
 import com.google.android.gms.example.rewardedinterstitialexample.databinding.ActivityMainBinding
 import java.util.concurrent.atomic.AtomicBoolean
-
-private const val AD_UNIT_ID = "ca-app-pub-3940256099942544/5354046379"
-private const val GAME_COUNTER_TIME = 10L
-private const val GAME_OVER_REWARD = 1
-private const val MAIN_ACTIVITY_TAG = "MainActivity"
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
@@ -99,26 +98,35 @@ class MainActivity : AppCompatActivity() {
 
   override fun onCreateOptionsMenu(menu: Menu?): Boolean {
     menuInflater.inflate(R.menu.action_menu, menu)
-    val moreMenu = menu?.findItem(R.id.action_more)
-    moreMenu?.isVisible = googleMobileAdsConsentManager.isPrivacyOptionsRequired
     return super.onCreateOptionsMenu(menu)
   }
 
   override fun onOptionsItemSelected(item: MenuItem): Boolean {
     val menuItemView = findViewById<View>(item.itemId)
+    val activity = this
     PopupMenu(this, menuItemView).apply {
       menuInflater.inflate(R.menu.popup_menu, menu)
+      menu
+        .findItem(R.id.privacy_settings)
+        .setVisible(googleMobileAdsConsentManager.isPrivacyOptionsRequired)
       show()
       setOnMenuItemClickListener { popupMenuItem ->
         when (popupMenuItem.itemId) {
           R.id.privacy_settings -> {
             pauseGame()
             // Handle changes to user consent.
-            googleMobileAdsConsentManager.showPrivacyOptionsForm(this@MainActivity) { formError ->
+            googleMobileAdsConsentManager.showPrivacyOptionsForm(activity) { formError ->
               if (formError != null) {
-                Toast.makeText(this@MainActivity, formError.message, Toast.LENGTH_SHORT).show()
+                Toast.makeText(activity, formError.message, Toast.LENGTH_SHORT).show()
               }
               resumeGame()
+            }
+            true
+          }
+          R.id.ad_inspector -> {
+            MobileAds.openAdInspector(activity) { error ->
+              // Error will be non-null if ad inspector closed due to an error.
+              error?.let { Toast.makeText(activity, it.message, Toast.LENGTH_SHORT).show() }
             }
             true
           }
@@ -170,7 +178,7 @@ class MainActivity : AppCompatActivity() {
             rewardedInterstitialAd = rewardedAd
             isLoadingAds = false
           }
-        }
+        },
       )
     }
   }
@@ -209,7 +217,7 @@ class MainActivity : AppCompatActivity() {
           if (rewardedInterstitialAd == null) {
             Log.d(
               MAIN_ACTIVITY_TAG,
-              "The game is over but the rewarded interstitial ad wasn't ready yet."
+              "The game is over but the rewarded interstitial ad wasn't ready yet.",
             )
             return
           }
@@ -286,10 +294,33 @@ class MainActivity : AppCompatActivity() {
       return
     }
 
-    // Initialize the Mobile Ads SDK.
-    MobileAds.initialize(this) { initializationStatus ->
-      // Load an ad.
-      loadRewardedInterstitialAd()
+    // Set your test devices.
+    MobileAds.setRequestConfiguration(
+      RequestConfiguration.Builder().setTestDeviceIds(listOf(TEST_DEVICE_HASHED_ID)).build()
+    )
+
+    CoroutineScope(Dispatchers.IO).launch {
+      // Initialize the Google Mobile Ads SDK on a background thread.
+      MobileAds.initialize(this@MainActivity) {}
+      runOnUiThread {
+        // Load an ad on the main thread.
+        loadRewardedInterstitialAd()
+      }
     }
+  }
+
+  companion object {
+    // This is an ad unit ID for a test ad. Replace with your own rewarded interstitial ad unit ID.
+    private const val AD_UNIT_ID = "ca-app-pub-3940256099942544/5354046379"
+    private const val GAME_COUNTER_TIME = 10L
+    private const val GAME_OVER_REWARD = 1
+    private const val MAIN_ACTIVITY_TAG = "MainActivity"
+
+    // Check your logcat output for the test device hashed ID e.g.
+    // "Use RequestConfiguration.Builder().setTestDeviceIds(Arrays.asList("ABCDEF012345"))
+    // to get test ads on this device" or
+    // "Use new ConsentDebugSettings.Builder().addTestDeviceHashedId("ABCDEF012345") to set this as
+    // a debug device".
+    const val TEST_DEVICE_HASHED_ID = "ABCDEF012345"
   }
 }

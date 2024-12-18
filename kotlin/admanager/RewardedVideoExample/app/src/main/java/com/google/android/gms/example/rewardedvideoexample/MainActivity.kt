@@ -14,16 +14,15 @@ import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.OnUserEarnedRewardListener
+import com.google.android.gms.ads.RequestConfiguration
 import com.google.android.gms.ads.admanager.AdManagerAdRequest
 import com.google.android.gms.ads.rewarded.RewardedAd
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
 import com.google.android.gms.example.rewardedvideoexample.databinding.ActivityMainBinding
 import java.util.concurrent.atomic.AtomicBoolean
-
-const val AD_UNIT_ID = "/6499/example/rewarded-video"
-const val COUNTER_TIME = 10L
-const val GAME_OVER_REWARD = 1
-const val TAG = "MainActivity"
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
@@ -99,30 +98,40 @@ class MainActivity : AppCompatActivity() {
 
   override fun onCreateOptionsMenu(menu: Menu?): Boolean {
     menuInflater.inflate(R.menu.action_menu, menu)
-    val moreMenu = menu?.findItem(R.id.action_more)
-    moreMenu?.isVisible = googleMobileAdsConsentManager.isPrivacyOptionsRequired
     return super.onCreateOptionsMenu(menu)
   }
 
   override fun onOptionsItemSelected(item: MenuItem): Boolean {
     val menuItemView = findViewById<View>(item.itemId)
-    val popup = PopupMenu(this, menuItemView)
-    popup.menuInflater.inflate(R.menu.popup_menu, popup.menu)
-    popup.show()
-    popup.setOnMenuItemClickListener { popupMenuItem ->
-      when (popupMenuItem.itemId) {
-        R.id.privacy_settings -> {
-          pauseGame()
-          // Handle changes to user consent.
-          googleMobileAdsConsentManager.showPrivacyOptionsForm(this) { formError ->
-            if (formError != null) {
-              Toast.makeText(this@MainActivity, formError.message, Toast.LENGTH_SHORT).show()
+    val activity = this
+    PopupMenu(this, menuItemView).apply {
+      menuInflater.inflate(R.menu.popup_menu, menu)
+      menu
+        .findItem(R.id.privacy_settings)
+        .setVisible(googleMobileAdsConsentManager.isPrivacyOptionsRequired)
+      show()
+      setOnMenuItemClickListener { popupMenuItem ->
+        when (popupMenuItem.itemId) {
+          R.id.privacy_settings -> {
+            pauseGame()
+            // Handle changes to user consent.
+            googleMobileAdsConsentManager.showPrivacyOptionsForm(activity) { formError ->
+              if (formError != null) {
+                Toast.makeText(activity, formError.message, Toast.LENGTH_SHORT).show()
+              }
+              resumeGame()
             }
-            resumeGame()
+            true
           }
-          true
+          R.id.ad_inspector -> {
+            MobileAds.openAdInspector(activity) { error ->
+              // Error will be non-null if ad inspector closed due to an error.
+              error?.let { Toast.makeText(activity, it.message, Toast.LENGTH_SHORT).show() }
+            }
+            true
+          }
+          else -> false
         }
-        else -> false
       }
     }
     return super.onOptionsItemSelected(item)
@@ -165,7 +174,7 @@ class MainActivity : AppCompatActivity() {
             rewardedAd = ad
             isLoading = false
           }
-        }
+        },
       )
     }
   }
@@ -244,7 +253,7 @@ class MainActivity : AppCompatActivity() {
           val rewardType = rewardItem.type
           addCoins(rewardAmount)
           Log.d("TAG", "User earned the reward.")
-        }
+        },
       )
     }
   }
@@ -254,9 +263,33 @@ class MainActivity : AppCompatActivity() {
       return
     }
 
-    // Initialize the Mobile Ads SDK.
-    MobileAds.initialize(this) {}
-    // Load an ad.
-    loadRewardedAd()
+    // Set your test devices.
+    MobileAds.setRequestConfiguration(
+      RequestConfiguration.Builder().setTestDeviceIds(listOf(TEST_DEVICE_HASHED_ID)).build()
+    )
+
+    CoroutineScope(Dispatchers.IO).launch {
+      // Initialize the Google Mobile Ads SDK on a background thread.
+      MobileAds.initialize(this@MainActivity) {}
+      runOnUiThread {
+        // Load an ad on the main thread.
+        loadRewardedAd()
+      }
+    }
+  }
+
+  companion object {
+    // This is an ad unit ID for a test ad. Replace with your own rewarded ad unit ID.
+    private const val AD_UNIT_ID = "/21775744923/example/rewarded"
+    private const val COUNTER_TIME = 10L
+    private const val GAME_OVER_REWARD = 1
+    private const val TAG = "MainActivity"
+
+    // Check your logcat output for the test device hashed ID e.g.
+    // "Use RequestConfiguration.Builder().setTestDeviceIds(Arrays.asList("ABCDEF012345"))
+    // to get test ads on this device" or
+    // "Use new ConsentDebugSettings.Builder().addTestDeviceHashedId("ABCDEF012345") to set this as
+    // a debug device".
+    const val TEST_DEVICE_HASHED_ID = "ABCDEF012345"
   }
 }

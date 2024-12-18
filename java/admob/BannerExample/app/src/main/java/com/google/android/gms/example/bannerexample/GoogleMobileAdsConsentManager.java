@@ -27,10 +27,9 @@ import com.google.android.ump.FormError;
 import com.google.android.ump.UserMessagingPlatform;
 
 /**
- * The Google Mobile Ads SDK provides the User Messaging Platform (Google's
- * IAB Certified consent management platform) as one solution to capture
- * consent for users in GDPR impacted countries. This is an example and
- * you can choose another consent management platform to capture consent.
+ * The Google Mobile Ads SDK provides the User Messaging Platform (Google's IAB Certified consent
+ * management platform) as one solution to capture consent for users in GDPR impacted countries.
+ * This is an example and you can choose another consent management platform to capture consent.
  */
 public class GoogleMobileAdsConsentManager {
   private static GoogleMobileAdsConsentManager instance;
@@ -60,11 +59,14 @@ public class GoogleMobileAdsConsentManager {
     return consentInformation.canRequestAds();
   }
 
+  // [START is_privacy_options_required]
   /** Helper variable to determine if the privacy options form is required. */
   public boolean isPrivacyOptionsRequired() {
     return consentInformation.getPrivacyOptionsRequirementStatus()
         == PrivacyOptionsRequirementStatus.REQUIRED;
   }
+
+  // [END is_privacy_options_required]
 
   /**
    * Helper method to call the UMP SDK methods to request consent information and load/present a
@@ -73,38 +75,50 @@ public class GoogleMobileAdsConsentManager {
   public void gatherConsent(
       Activity activity, OnConsentGatheringCompleteListener onConsentGatheringCompleteListener) {
     // For testing purposes, you can force a DebugGeography of EEA or NOT_EEA.
-    ConsentDebugSettings debugSettings = new ConsentDebugSettings.Builder(activity)
-        // .setDebugGeography(ConsentDebugSettings.DebugGeography.DEBUG_GEOGRAPHY_EEA)
-        // Check your logcat output for the hashed device ID e.g.
-        // "Use new ConsentDebugSettings.Builder().addTestDeviceHashedId("ABCDEF012345")" to use
-        // the debug functionality.
-        .addTestDeviceHashedId("TEST-DEVICE-HASHED-ID")
-        .build();
+    ConsentDebugSettings debugSettings =
+        new ConsentDebugSettings.Builder(activity)
+            // .setDebugGeography(ConsentDebugSettings.DebugGeography.DEBUG_GEOGRAPHY_EEA)
+            .addTestDeviceHashedId(MyActivity.TEST_DEVICE_HASHED_ID)
+            .build();
 
-    ConsentRequestParameters params = new ConsentRequestParameters.Builder()
-        .setConsentDebugSettings(debugSettings)
-        .build();
+    ConsentRequestParameters params =
+        new ConsentRequestParameters.Builder().setConsentDebugSettings(debugSettings).build();
 
+    // [START request_consent_info_update]
     // Requesting an update to consent information should be called on every app launch.
     consentInformation.requestConsentInfoUpdate(
         activity,
         params,
-        () ->
-            UserMessagingPlatform.loadAndShowConsentFormIfRequired(
-                activity,
-                formError -> {
-                  // Consent has been gathered.
-                  onConsentGatheringCompleteListener.consentGatheringComplete(formError);
-                }),
-        requestConsentError ->
-            onConsentGatheringCompleteListener.consentGatheringComplete(requestConsentError)
-    );
+        () -> // Called when consent information is successfully updated.
+            // [START_EXCLUDE silent]
+            loadAndShowConsentFormIfRequired(activity, onConsentGatheringCompleteListener),
+        // [END_EXCLUDE]
+        requestConsentError -> // Called when there's an error updating consent information.
+            // [START_EXCLUDE silent]
+            onConsentGatheringCompleteListener.consentGatheringComplete(requestConsentError));
+    // [END_EXCLUDE]
+    // [END request_consent_info_update]
+  }
+
+  private void loadAndShowConsentFormIfRequired(
+      Activity activity, OnConsentGatheringCompleteListener onConsentGatheringCompleteListener) {
+    // [START load_and_show_consent_form]
+    UserMessagingPlatform.loadAndShowConsentFormIfRequired(
+        activity,
+        formError -> {
+          // Consent gathering process is complete.
+          // [START_EXCLUDE silent]
+          onConsentGatheringCompleteListener.consentGatheringComplete(formError);
+          // [END_EXCLUDE]
+        });
+    // [END load_and_show_consent_form]
   }
 
   /** Helper method to call the UMP SDK method to present the privacy options form. */
   public void showPrivacyOptionsForm(
-      Activity activity,
-      OnConsentFormDismissedListener onConsentFormDismissedListener) {
+      Activity activity, OnConsentFormDismissedListener onConsentFormDismissedListener) {
+    // [START present_privacy_options_form]
     UserMessagingPlatform.showPrivacyOptionsForm(activity, onConsentFormDismissedListener);
+    // [END present_privacy_options_form]
   }
 }

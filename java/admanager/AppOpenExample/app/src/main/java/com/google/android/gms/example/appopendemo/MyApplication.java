@@ -39,6 +39,13 @@ import java.util.Date;
 public class MyApplication extends Application
     implements ActivityLifecycleCallbacks, DefaultLifecycleObserver {
 
+  // Check your logcat output for the test device hashed ID e.g.
+  // "Use RequestConfiguration.Builder().setTestDeviceIds(Arrays.asList("ABCDEF012345"))
+  // to get test ads on this device" or
+  // "Use new ConsentDebugSettings.Builder().addTestDeviceHashedId("ABCDEF012345") to set this as
+  // a debug device".
+  public static final String TEST_DEVICE_HASHED_ID = "ABCDEF012345";
+
   private AppOpenAdManager appOpenAdManager;
   private Activity currentActivity;
   private static final String TAG = "MyApplication";
@@ -125,7 +132,7 @@ public class MyApplication extends Application
   private class AppOpenAdManager {
 
     private static final String LOG_TAG = "AppOpenAdManager";
-    private static final String AD_UNIT_ID = "/6499/example/app-open";
+    private static final String AD_UNIT_ID = "/21775744923/example/app-open";
 
     private final GoogleMobileAdsConsentManager googleMobileAdsConsentManager =
         GoogleMobileAdsConsentManager.getInstance(getApplicationContext());

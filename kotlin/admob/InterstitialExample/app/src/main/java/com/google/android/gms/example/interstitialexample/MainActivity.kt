@@ -14,9 +14,9 @@ import com.google.android.gms.ads.interstitial.InterstitialAd
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import com.google.android.gms.example.interstitialexample.databinding.ActivityMainBinding
 import java.util.concurrent.atomic.AtomicBoolean
-
-const val GAME_LENGTH_MILLISECONDS = 3000L
-const val AD_UNIT_ID = "ca-app-pub-3940256099942544/1033173712"
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
@@ -63,14 +63,6 @@ class MainActivity : AppCompatActivity() {
       initializeMobileAdsSdk()
     }
 
-    // Set your test devices. Check your logcat output for the hashed device ID to
-    // get test ads on a physical device. e.g.
-    // "Use RequestConfiguration.Builder().setTestDeviceIds(Arrays.asList("ABCDEF012345"))
-    // to get test ads on this device."
-    MobileAds.setRequestConfiguration(
-      RequestConfiguration.Builder().setTestDeviceIds(listOf("ABCDEF012345")).build()
-    )
-
     // Create the "retry" button, which triggers an interstitial between game plays.
     binding.retryButton.visibility = View.INVISIBLE
     binding.retryButton.setOnClickListener { showInterstitial() }
@@ -78,9 +70,6 @@ class MainActivity : AppCompatActivity() {
 
   override fun onCreateOptionsMenu(menu: Menu?): Boolean {
     menuInflater.inflate(R.menu.action_menu, menu)
-    menu?.findItem(R.id.action_more)?.apply {
-      isVisible = googleMobileAdsConsentManager.isPrivacyOptionsRequired
-    }
     return super.onCreateOptionsMenu(menu)
   }
 
@@ -89,6 +78,9 @@ class MainActivity : AppCompatActivity() {
     val activity = this
     PopupMenu(this, menuItemView).apply {
       menuInflater.inflate(R.menu.popup_menu, menu)
+      menu
+        .findItem(R.id.privacy_settings)
+        .setVisible(googleMobileAdsConsentManager.isPrivacyOptionsRequired)
       show()
       setOnMenuItemClickListener { popupMenuItem ->
         when (popupMenuItem.itemId) {
@@ -100,6 +92,13 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(activity, formError.message, Toast.LENGTH_SHORT).show()
               }
               resumeGame()
+            }
+            true
+          }
+          R.id.ad_inspector -> {
+            MobileAds.openAdInspector(activity) { error ->
+              // Error will be non-null if ad inspector closed due to an error.
+              error?.let { Toast.makeText(activity, it.message, Toast.LENGTH_SHORT).show() }
             }
             true
           }
@@ -134,7 +133,7 @@ class MainActivity : AppCompatActivity() {
           Toast.makeText(
               this@MainActivity,
               "onAdFailedToLoad() with error $error",
-              Toast.LENGTH_SHORT
+              Toast.LENGTH_SHORT,
             )
             .show()
         }
@@ -145,7 +144,7 @@ class MainActivity : AppCompatActivity() {
           adIsLoading = false
           Toast.makeText(this@MainActivity, "onAdLoaded()", Toast.LENGTH_SHORT).show()
         }
-      }
+      },
     )
   }
 
@@ -233,10 +232,18 @@ class MainActivity : AppCompatActivity() {
       return
     }
 
-    // Initialize the Mobile Ads SDK.
-    MobileAds.initialize(this) { initializationStatus ->
-      // Load an ad.
-      loadAd()
+    // Set your test devices.
+    MobileAds.setRequestConfiguration(
+      RequestConfiguration.Builder().setTestDeviceIds(listOf(TEST_DEVICE_HASHED_ID)).build()
+    )
+
+    CoroutineScope(Dispatchers.IO).launch {
+      // Initialize the Google Mobile Ads SDK on a background thread.
+      MobileAds.initialize(this@MainActivity) {}
+      runOnUiThread {
+        // Load an ad on the main thread.
+        loadAd()
+      }
     }
   }
 
@@ -251,7 +258,17 @@ class MainActivity : AppCompatActivity() {
     pauseGame()
   }
 
-  private companion object {
-    const val TAG = "MainActivity"
+  companion object {
+    // This is an ad unit ID for a test ad. Replace with your own interstitial ad unit ID.
+    private const val AD_UNIT_ID = "ca-app-pub-3940256099942544/1033173712"
+    private const val GAME_LENGTH_MILLISECONDS = 3000L
+    private const val TAG = "MainActivity"
+
+    // Check your logcat output for the test device hashed ID e.g.
+    // "Use RequestConfiguration.Builder().setTestDeviceIds(Arrays.asList("ABCDEF012345"))
+    // to get test ads on this device" or
+    // "Use new ConsentDebugSettings.Builder().addTestDeviceHashedId("ABCDEF012345") to set this as
+    // a debug device".
+    const val TEST_DEVICE_HASHED_ID = "ABCDEF012345"
   }
 }

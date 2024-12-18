@@ -19,18 +19,26 @@ import com.google.android.gms.ads.FullScreenContentCallback;
 import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.MobileAds;
 import com.google.android.gms.ads.OnUserEarnedRewardListener;
+import com.google.android.gms.ads.RequestConfiguration;
 import com.google.android.gms.ads.admanager.AdManagerAdRequest;
-import com.google.android.gms.ads.initialization.InitializationStatus;
-import com.google.android.gms.ads.initialization.OnInitializationCompleteListener;
 import com.google.android.gms.ads.rewarded.RewardItem;
 import com.google.android.gms.ads.rewarded.RewardedAd;
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback;
+import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Main Activity. Inflates main activity xml. */
 @SuppressLint("SetTextI18n")
 public class MainActivity extends AppCompatActivity {
-  private static final String AD_UNIT_ID = "/6499/example/rewarded-video";
+
+  // Check your logcat output for the test device hashed ID e.g.
+  // "Use RequestConfiguration.Builder().setTestDeviceIds(Arrays.asList("ABCDEF012345"))
+  // to get test ads on this device" or
+  // "Use new ConsentDebugSettings.Builder().addTestDeviceHashedId("ABCDEF012345") to set this as
+  // a debug device".
+  public static final String TEST_DEVICE_HASHED_ID = "ABCDEF012345";
+
+  private static final String AD_UNIT_ID = "/21775744923/example/rewarded";
   private static final long COUNTER_TIME = 10;
   private static final int GAME_OVER_REWARD = 1;
   private static final String TAG = MainActivity.class.getName();
@@ -94,11 +102,7 @@ public class MainActivity extends AppCompatActivity {
           @Override
           public void onClick(View view) {
             startGame();
-            if (
-                rewardedAd != null
-                    && !isLoading
-                    && googleMobileAdsConsentManager.canRequestAds()
-            ) {
+            if (rewardedAd != null && !isLoading && googleMobileAdsConsentManager.canRequestAds()) {
               loadRewardedAd();
             }
           }
@@ -138,8 +142,6 @@ public class MainActivity extends AppCompatActivity {
   @Override
   public boolean onCreateOptionsMenu(Menu menu) {
     getMenuInflater().inflate(R.menu.action_menu, menu);
-    MenuItem moreMenu = menu.findItem(R.id.action_more);
-    moreMenu.setVisible(googleMobileAdsConsentManager.isPrivacyOptionsRequired());
     return true;
   }
 
@@ -148,12 +150,17 @@ public class MainActivity extends AppCompatActivity {
     View menuItemView = findViewById(item.getItemId());
     PopupMenu popup = new PopupMenu(this, menuItemView);
     popup.getMenuInflater().inflate(R.menu.popup_menu, popup.getMenu());
+    popup
+        .getMenu()
+        .findItem(R.id.privacy_settings)
+        .setVisible(googleMobileAdsConsentManager.isPrivacyOptionsRequired());
+    pauseGame();
     popup.show();
     popup.setOnMenuItemClickListener(
         popupMenuItem -> {
           if (popupMenuItem.getItemId() == R.id.privacy_settings) {
-            // Handle changes to user consent.
             pauseGame();
+            // Handle changes to user consent.
             googleMobileAdsConsentManager.showPrivacyOptionsForm(
                 this,
                 formError -> {
@@ -161,6 +168,16 @@ public class MainActivity extends AppCompatActivity {
                     Toast.makeText(this, formError.getMessage(), Toast.LENGTH_SHORT).show();
                   }
                   resumeGame();
+                });
+            return true;
+          } else if (popupMenuItem.getItemId() == R.id.ad_inspector) {
+            MobileAds.openAdInspector(
+                this,
+                error -> {
+                  // Error will be non-null if ad inspector closed due to an error.
+                  if (error != null) {
+                    Toast.makeText(this, error.getMessage(), Toast.LENGTH_SHORT).show();
+                  }
                 });
             return true;
           }
@@ -319,14 +336,20 @@ public class MainActivity extends AppCompatActivity {
       return;
     }
 
-    // Initialize the Mobile Ads SDK.
-    MobileAds.initialize(this, new OnInitializationCompleteListener() {
-      @Override
-      public void onInitializationComplete(InitializationStatus initializationStatus) {
-      }
-    });
+    // Set your test devices.
+    MobileAds.setRequestConfiguration(
+        new RequestConfiguration.Builder()
+            .setTestDeviceIds(Arrays.asList(TEST_DEVICE_HASHED_ID))
+            .build());
 
-    // Load an ad.
-    loadRewardedAd();
+    new Thread(
+            () -> {
+              // Initialize the Google Mobile Ads SDK on a background thread.
+              MobileAds.initialize(this, initializationStatus -> {});
+
+              // Load an ad on the main thread.
+              runOnUiThread(() -> loadRewardedAd());
+            })
+        .start();
   }
 }
