@@ -90,4 +90,6 @@ public final class GoogleMobileAdsConsentManager {
       OnConsentFormDismissedListener onConsentFormDismissedListener) {
     UserMessagingPlatform.showPrivacyOptionsForm(activity, onConsentFormDismissedListener);
   }
-}Control + Shift + m
+}
+  
+
